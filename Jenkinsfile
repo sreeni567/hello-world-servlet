@@ -1,48 +1,24 @@
 pipeline {
-    agent any 
-    tools { 
-        maven 'Maven' 
-      
-    }
-stages { 
-     
- stage('Preparation') { 
-     steps {
-// for display purposes
+   agent any
 
-      // Get some code from a GitHub repository
-
-      git 'https://github.com/raknas999/hello-world-servlet.git'
-
-      // Get the Maven tool.
-     
- // ** NOTE: This 'M3' Maven tool must be configured
- 
-     // **       in the global configuration.   
-     }
+   tools {
+      // Install the Maven version configured as "Maven-3.6" and add it to the path.
+      maven "Maven-3.6"
    }
 
-   stage('Build') {
-       steps {
-       // Run the maven build
-
-      //if (isUnix()) {
-         sh 'mvn -Dmaven.test.failure.ignore=true install'
-      //} 
-      //else {
-      //   bat(/"${mvnHome}\bin\mvn" -Dmaven.test.failure.ignore clean package/)
+   stages {
+      stage('Checkout') {
+         steps {
+           checkout([$class: 'GitSCM', branches: [[name: '*/devops']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[url: 'https://github.com/sreeni567/hello-world-servlet.git']]])
+         }
        }
-//}
-   }
- 
-  stage('Results') {
-      steps {
-      junit '**/target/surefire-reports/TEST-*.xml'
-      archiveArtifacts 'target/*.war'
-      }
- }
- stage('Sonarqube') {
-    environment {
+stage('Unit Test cases') {
+         steps {
+           sh label: '', script: 'clean test'
+         }
+       }
+stage('Code quality/Sonarqube') {
+        environment {
         scannerHome = tool 'sonarqube'
     }
     steps {
@@ -52,20 +28,27 @@ stages {
         timeout(time: 10, unit: 'MINUTES') {
             waitForQualityGate abortPipeline: true
         }
-    }
-}
-     stage('Artifact upload') {
-      steps {
-     nexusPublisher nexusInstanceId: '1234', nexusRepositoryId: 'releases', packages: [[$class: 'MavenPackage', mavenAssetList: [[classifier: '', extension: '', filePath: 'target/helloworld.war']], mavenCoordinate: [artifactId: 'hello-world-servlet-example', groupId: 'com.geekcap.vmturbo', packaging: 'war', version: '$BUILD_NUMBER']]]
-      }
- }
-}
-post {
-        success {
-            mail to:"raknas000@gmail.com", subject:"SUCCESS: ${currentBuild.fullDisplayName}", body: "Build success"
-        }
-        failure {
-            mail to:"raknas000@gmail.com", subject:"FAILURE: ${currentBuild.fullDisplayName}", body: "Build failed"
-        }
-    }       
+         }
+       }
+stage('Package creation') {
+         steps {
+           sh label: '', script: 'clean package'
+         }
+       }
+
+stage('Artifact upload') {
+         steps {
+           nexusPublisher nexusInstanceId: '1234', nexusRepositoryId: 'releases', packages: [[$class: 'MavenPackage', mavenAssetList: [[classifier: '', extension: '', filePath: '/var/lib/jenkins/workspace/helloworld-pipeline/target/helloworld.war']], mavenCoordinate: [artifactId: 'hello-world-servlet-example', groupId: 'com.geekcap.vmturbo', packaging: 'war', version: '1.0']]]
+         }
+       }
+         post {
+            // If Maven was able to run the tests, even if some of the test
+            // failed, record the test results and archive the jar file.
+            success {
+               junit '**/target/surefire-reports/TEST-*.xml'
+               archiveArtifacts 'target/*.jar'
+            }
+         }
+      
+   }
 }
